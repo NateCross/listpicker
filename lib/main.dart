@@ -1,9 +1,10 @@
 import 'dart:collection';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_spinbox/material.dart';
 import 'package:provider/provider.dart';
 import 'package:quantity_input/quantity_input.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(
@@ -17,25 +18,51 @@ void main() {
 class Item {
   String name = '';
   Item(this.name);
+
+  Item.fromJson(Map<String, dynamic> json):
+    name = json['n'];
+  Map<String, dynamic> toJson() {
+    return {
+      'n': name,
+    };
+  }
 }
 
 class ItemListModel extends ChangeNotifier {
-  final List<Item> _items = [];
+  List<Item> _items = [];
 
   UnmodifiableListView<Item> get items =>
     UnmodifiableListView(_items);
+  
+  void loadPrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final toLoad = prefs.getString('list');
+    if (toLoad == null) return;
+    Iterable decoded = jsonDecode(toLoad);
+    _items = List<Item>.from(decoded.map((e) => Item.fromJson(e)));
+    notifyListeners();
+  }
+
+  void savePrefs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final toSave = jsonEncode(_items);
+    await prefs.setString('list', toSave);
+  }
 
   void add(Item item) {
     _items.add(item);
     notifyListeners();
+    savePrefs();
   }
   void remove(Item item) {
     _items.removeWhere((listItem) => listItem.name == item.name);
     notifyListeners();
+    savePrefs();
   }
   void clear() {
     _items.clear();
     notifyListeners();
+    savePrefs();
   }
   void edit(Item oldItem, Item newItem) {
     final index = _items.indexOf(oldItem);
@@ -44,6 +71,7 @@ class ItemListModel extends ChangeNotifier {
     }
     _items[index] = newItem;
     notifyListeners();
+    savePrefs();
   }
 
   // void _print() {
@@ -91,9 +119,17 @@ class _MyHomePageState extends State<MyHomePage> {
     return items.sublist(0, quantity - 1);
   }
 
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   var provider = Provider.of<ItemListModel>(context);
+  //   provider.loadPrefs();
+  // }
+
   @override
   Widget build(BuildContext context) {
     final itemList = context.read<ItemListModel>();
+    itemList.loadPrefs();
 
     return Scaffold(
       appBar: AppBar(
@@ -122,6 +158,16 @@ class _MyHomePageState extends State<MyHomePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children:  [
+                QuantityInput(
+                  value: _numToPick, 
+                  onChanged: (value) => setState(() => _numToPick = int.parse(value)),
+                  minValue: 1,
+                  maxValue: itemList.items.isEmpty ? 1 : itemList.items.length,
+                  decoration: const InputDecoration(
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(width: 24),
                 ElevatedButton.icon(
                   // onPressed: onPressed,
                   label: const Text('Pick'),
@@ -135,16 +181,6 @@ class _MyHomePageState extends State<MyHomePage> {
                     builder: (dialogContext) => PickDialog(quantity: _numToPick)
                   ),
                 ),
-                const SizedBox(width: 24),
-                QuantityInput(
-                  value: _numToPick, 
-                  onChanged: (value) => setState(() => _numToPick = int.parse(value)),
-                  minValue: 1,
-                  maxValue: itemList.items.isEmpty ? 1 : itemList.items.length,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                  ),
-                )
               ],
             ),
             const SizedBox(height: 22.5),
@@ -179,11 +215,14 @@ class PickDialog extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (var item in pickedItems)
-              Text(
-                item.name,
-                style: const TextStyle(fontSize: 24),
-              ),
+            if (pickedItems.isEmpty)
+              const Text('No items added')
+            else
+              for (var item in pickedItems)
+                Text(
+                  item.name,
+                  style: const TextStyle(fontSize: 24),
+                ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
