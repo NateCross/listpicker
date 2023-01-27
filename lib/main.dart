@@ -28,7 +28,7 @@ class ItemListModel extends ChangeNotifier {
     notifyListeners();
   }
   void remove(Item item) {
-    _items.remove(item);
+    _items.removeWhere((listItem) => listItem.name == item.name);
     notifyListeners();
   }
   void clear() {
@@ -43,8 +43,12 @@ class ItemListModel extends ChangeNotifier {
     _items[index] = newItem;
     notifyListeners();
   }
+  void _print() {
+    for (var item in items) {
+      print(item.name);
+    }
+  }
 }
-
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -86,42 +90,54 @@ class _MyHomePageState extends State<MyHomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final itemList = context.read<ItemListModel>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('List Picker'),
       ),
       body: Center(
-        child: ListView(
-          padding: const EdgeInsets.all(20),
+        child: Column(
           children: [
-            Column(
-              children: [
-                 TextField(
-                  // onChanged: (value) => editTextField(value),
-                  controller: _textFieldController,
-                  onSubmitted: (value) {
-                    var item = Item(value);
-                    addToList(context, item);
-                    _textFieldController.clear();
-                  },
-                  style: const TextStyle(
-                    fontSize: 32,
-                  ),
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'Add an item to the list',
-                  ),
-                ),
-                const SizedBox(height: 22.5),
-                Consumer<ItemListModel>(
-                  builder: (context, item, child) => Column(
+            TextField(
+              // onChanged: (value) => editTextField(value),
+              controller: _textFieldController,
+              onSubmitted: (value) {
+                var item = Item(value);
+                addToList(context, item);
+                _textFieldController.clear();
+              },
+              style: const TextStyle(
+                fontSize: 32,
+              ),
+              decoration: const InputDecoration(
+                border: OutlineInputBorder(),
+                hintText: 'Add an item to the list',
+              ),
+            ),
+            const SizedBox(height: 22.5),
+            Expanded(
+              child: ListView(
+                key: Key(itemList.items.length.toString()),
+                padding: const EdgeInsets.all(20),
+                children: [
+                  Column(
                     children: [
-                      for (var i in item.items) ItemWidget(item: i)
+                      Consumer<ItemListModel>(
+                        builder: (context, item, child) => Column(
+                          children: [
+                            for (var i in item.items)
+                              ItemWidget(
+                                item: i,
+                                key: Key(i.name),
+                              )
+                          ],
+                        )
+                      ),
                     ],
-                  )
-                ),
-                // const ItemWidget()
-              ],
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -130,28 +146,68 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 }
 
-class ItemWidget extends StatelessWidget {
+class ItemWidget extends StatefulWidget {
   const ItemWidget({
     Key? key,
     required this.item,
   }) : super(key: key);
 
   final Item item;
+
+  @override
+  State<ItemWidget> createState() => _ItemWidgetState();
+}
+
+class _ItemWidgetState extends State<ItemWidget> {
   final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.text = widget.item.name;
+  }
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
-        title: TextField(
-          controller: _controller,
-          
-
+        title: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                onEditingComplete: () {
+                  var newItem = Item(_controller.text);
+                  var itemModel = context.read<ItemListModel>();
+                  itemModel.edit(widget.item, newItem);
+                },
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(
+                    vertical: 24,
+                    horizontal: 12,
+                  ),
+                ),
+                style: const TextStyle(
+                  fontSize: 24,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: () {
+                var itemModel = context.read<ItemListModel>();
+                itemModel.remove(widget.item);
+              },
+              icon: const Icon(Icons.delete),
+            ),
+          ],
         ),
-        // title: Text(
-        //   item.name,
-        //   textScaleFactor: 1.5,
-        // ),
       ),
     );
   }
